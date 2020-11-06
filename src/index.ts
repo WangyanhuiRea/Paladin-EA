@@ -128,10 +128,15 @@ async function createPage(browser: puppeteer.Browser) {
   });
   page.on("request", (req) => {
     let resourceType = req.resourceType();
+    const headers = Object.assign({}, req.headers(), {
+      "cache-control": "public", // remove "cache-control" header
+      pragma: "public",
+    });
     if (resourceType === "image") {
       req.abort();
     } else {
-      req.continue();
+      req.continue({ headers });
+      // req.continue();
     }
   });
 
@@ -203,22 +208,30 @@ async function run(page: puppeteer.Page, config: config.Config) {
 // cleanImage()
 
 async function getBrowser() {
-  let args = ['--lang=zh-cn', '--disable-dev-shm-usage', '--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-accelerated-2d-canvas']
-  logger.debug("SE_PROXY: %s", process.env["SE_PROXY"])
+  let args = [
+    "--lang=zh-cn",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-gpu",
+    "--disable-accelerated-2d-canvas",
+  ];
+  logger.debug("SE_PROXY: %s", process.env["SE_PROXY"]);
   if (process.env["SE_PROXY"] === "1") {
-    args.push('--proxy-server=101.231.121.17:80')
+    args.push("--proxy-server=101.231.121.17:80");
   }
   let browser = await puppeteer.launch({
     defaultViewport: {
       width: 1920,
-      height: 1080
+      height: 1080,
     },
     ignoreHTTPSErrors: true,
-    args
-  })
+    // devtools: true,
+    // headless: false,
+    args,
+  });
 
-
-  return browser
+  return browser;
 }
 let isEnd = false;
 async function start() {

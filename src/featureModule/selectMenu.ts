@@ -8,7 +8,8 @@ import { MENU_NAV_TIMEOUT } from "./config";
 
 const AllMenuContainer = ".jazz-menu > *";
 const SubMenuContainerSelector = '[role="menu"]';
-const SubItemSelector = "[role='menu'] > div";
+const SubItemSelector = "[role='menuitem']";
+const CustomerSettingSubItemSelector = "[aria-expanded='true']";
 const TimeOutOption = {
   // waitUntil: ["domcontentloaded"],
   timeout: MENU_NAV_TIMEOUT * 1000,
@@ -35,10 +36,15 @@ const gotoSubMenuPage = async (
     if (index !== 0) {
       await parentEle.hover();
       await page.waitForSelector(SubMenuContainerSelector, TimeOutOption);
-      logger.info(
-        `[selectMenu/handleCheckUnitPage/gotoSubMenuPage]::click subMenu ${currentMenuText}`
-      );
-      await currentMenu.click();
+
+      if (childConfig.children) {
+        currentMenu.hover();
+      } else {
+        logger.info(
+          `[selectMenu/handleCheckUnitPage/gotoSubMenuPage]::click subMenu ${currentMenuText}`
+        );
+        await currentMenu.click();
+      }
     } else {
       logger.info(
         `[selectMenu/handleCheckUnitPage/gotoSubMenuPage]::enter subMenu ${currentMenuText}`
@@ -152,22 +158,30 @@ async function handleCheckUnitPage(
     logger.info(
       `[selectMenu/handleCheckUnitPage]::menu ${menu.text} has submenu`
     );
-
     await menu.ele.hover();
-    await page.waitForSelector(SubMenuContainerSelector);
+
+    if (menu.text === "数据点配置" || menu.text === "层级配置") {
+      await page.waitForSelector(CustomerSettingSubItemSelector);
+    } else {
+      await page.waitForSelector(SubMenuContainerSelector);
+    }
 
     logger.info(
       `[selectMenu/handleCheckUnitPage]::menu ${menu.text} show sub menus`
     );
 
     const subItems = await page.$$(SubItemSelector);
-    const subItemsText = await page.$$eval(SubItemSelector, (submenu) => {
-      return [...submenu].map((item) => {
-        return {
-          text: item.textContent,
-        };
-      });
-    });
+    const subItemsText: Array<mainMenuObject> = await page.$$eval(
+      SubItemSelector,
+      (submenu) => {
+        return [...submenu].map((item, idx) => {
+          return {
+            hasSubMenus: item.childElementCount !== 0,
+            text: item.textContent,
+          };
+        });
+      }
+    );
 
     logger.info(
       `[selectMenu/handleCheckUnitPage]::menu ${menu.text}'s subItems:`,
@@ -182,15 +196,26 @@ async function handleCheckUnitPage(
       );
       // 如果是配置过的项目
       if (childConfig) {
-        await gotoSubMenuPage(
-          childConfig,
-          subItems[idx],
-          subItemsText[idx].text,
-          page,
-          menu.ele,
-          //第一个菜单的第一个子菜单不用再去操作
-          index === 0 ? Number(idx) : 1
-        );
+        console.log("childConfig=", childConfig);
+        if (childConfig.children) {
+          subItemsText[idx].ele = subItems[idx];
+          await handleCheckUnitPage(
+            subItemsText[idx],
+            page,
+            childConfig,
+            Number(idx)
+          );
+        } else {
+          await gotoSubMenuPage(
+            childConfig,
+            subItems[idx],
+            subItemsText[idx].text,
+            page,
+            menu.ele,
+            //第一个菜单的第一个子菜单不用再去操作
+            index === 0 ? Number(idx) : 1
+          );
+        }
       }
     }
   }
@@ -210,6 +235,7 @@ export async function selectMenu(
 
   // 查找出所有线上的一级菜单名
   let mainMenus = await page.$$(AllMenuContainer);
+
   let mainMenuConfig: Array<mainMenuObject> = await page.$$eval(
     AllMenuContainer,
     (menus) => {
